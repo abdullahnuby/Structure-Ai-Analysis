@@ -44,7 +44,7 @@ def parse_architectural_layer(name):
                             if tok == "text" or norm == "text" or tok == "نص"
                             else (
                                 "grid_axis"
-                                if tok in {"grid", "axis", "عمور", "محور"}
+                                if tok in {"grid", "axis", "محور"}
                                 else "unknown"
                             )
                         )
@@ -60,15 +60,29 @@ def parse_architectural_layer(name):
         "dimension_parse_status": "NOT_APPLICABLE",
         "is_title_layer": role == "text",
     }
+    out["unit_assumed"] = False
     if role in {"column", "beam"}:
         z = PAIR.search(norm)
         if z:
-            a, b = float(z.group(1).replace(",", ".")), float(z.group(3).replace(",", "."))
-            if any((u or "").casefold() in {"mm", "ملم"} for u in [z.group(2), z.group(4)]):
-                a, b = a / 10, b / 10
+            a_raw, u1, b_raw, u2 = (
+                float(z.group(1).replace(",", ".")),
+                _unit_key(z.group(2)),
+                float(z.group(3).replace(",", ".")),
+                _unit_key(z.group(4)),
+            )
+            # "60x30cm" writes the unit once at the end and it applies to both sides;
+            # when both sides carry a unit each side is converted with its own unit.
+            u1 = u1 or u2
+            u2 = u2 or u1
+            assumed = u1 is None and u2 is None
             out.update(
-                dimensions_cm={"width": a, "depth": b},
-                dimension_parse_status="PARSED_NEEDS_CONFIRMATION",
+                dimensions_cm={"width": _to_cm(a_raw, u1), "depth": _to_cm(b_raw, u2)},
+                dimension_parse_status=(
+                    "PARSED_UNIT_ASSUMED_CM_NEEDS_CONFIRMATION"
+                    if assumed
+                    else "PARSED_NEEDS_CONFIRMATION"
+                ),
+                unit_assumed=assumed,
             )
         else:
             out["dimension_parse_status"] = "MISSING_SECTION_PAIR"
@@ -76,17 +90,51 @@ def parse_architectural_layer(name):
         z = SINGLE.search(norm)
         if z:
             v = float(z.group(1).replace(",", "."))
-            u = (z.group(2) or "").casefold()
-            if u in {"mm", "ملم"}:
-                v /= 10
             out.update(
-                dimensions_cm={"thickness": v}, dimension_parse_status="PARSED_NEEDS_CONFIRMATION"
+                dimensions_cm={"thickness": _to_cm(v, _unit_key(z.group(2)))},
+                dimension_parse_status="PARSED_NEEDS_CONFIRMATION",
             )
     return out
 
 
+def _unit_key(unit):
+    u = (unit or "").casefold()
+    if u in {"mm", "ملم"}:
+        return "mm"
+    if u in {"cm", "سم"}:
+        return "cm"
+    return None
+
+
+def _to_cm(value, unit):
+    """Convert one dimension to cm using its own unit; no unit means cm (flagged by the caller)."""
+    return value / 10.0 if unit == "mm" else value
+
+
+# Entity types with no usable vertex list: their footprint is taken from the entity's
+# bounding box (for a block reference that includes the block content, with transforms).
+_BBOX_TYPES = {"INSERT", "HATCH", "CIRCLE", "ARC", "ELLIPSE", "SOLID", "TRACE", "3DFACE", "SPLINE"}
+
+
+def _bbox_points(e):
+    """Closed rectangle [x, y] points of the entity's bbox, or [] when it cannot be computed."""
+    try:
+        from ezdxf import bbox as _bbox
+
+        box = _bbox.extents([e], fast=True)
+        if not box.has_data:
+            return []
+        lo, hi = box.extmin, box.extmax
+        pts = [[lo.x, lo.y], [hi.x, lo.y], [hi.x, hi.y], [lo.x, hi.y], [lo.x, lo.y]]
+        return [[float(x), float(y)] for x, y in pts if math.isfinite(x) and math.isfinite(y)]
+    except Exception:
+        return []
+
+
 def _pts(e):
     k = e.dxftype()
+    if k in _BBOX_TYPES:
+        return _bbox_points(e)
     try:
         if k == "LINE":
             return [
@@ -113,6 +161,31 @@ def _text(e):
         return ""
 
 
+def _score_entity(spec, kind, closed, from_bbox):
+    """Evidence-based confidence for 'this entity is what its layer name says'.
+
+    It is a ranking aid for the reviewer, not a probability: layer name match is the only
+    base evidence, closed outlines and parsed section sizes raise it, open LINE fragments
+    (which are not grouped into one member) lower it.
+    """
+    evidence = []
+    if spec["parsed_role"] == "unknown":
+        return 0.15, evidence
+    score = 0.55
+    if spec["parsed_role"] in {"column", "beam"} and str(
+        spec.get("dimension_parse_status", "")
+    ).startswith("PARSED"):
+        score += 0.15 if not spec.get("unit_assumed") else 0.05
+        evidence.append("section_size_in_layer_name")
+    if closed or from_bbox:
+        score += 0.15
+        evidence.append("closed_outline" if closed else "footprint_from_entity_bbox")
+    if kind == "LINE":
+        score -= 0.15
+        evidence.append("open_line_fragment_not_grouped")
+    return round(min(max(score, 0.2), 0.9), 2), evidence
+
+
 def analyze_dxf_structure(data: bytes, filename="drawing.dxf"):
     if not data:
         raise ValueError("DXF file is empty.")
@@ -129,6 +202,7 @@ def analyze_dxf_structure(data: bytes, filename="drawing.dxf"):
     types = Counter()
     layers = Counter()
     allp = []
+    line_fragments = 0
     for i, e in enumerate(doc.modelspace(), 1):
         k = e.dxftype()
         ln = str(e.dxf.get("layer", "0"))
@@ -150,6 +224,11 @@ def analyze_dxf_structure(data: bytes, filename="drawing.dxf"):
         )
         if role == "unknown" and k in {"TEXT", "MTEXT", "DIMENSION", "LEADER"}:
             role = "annotation"
+        from_bbox = k in _BBOX_TYPES and bool(pts)
+        closed = from_bbox or bool(getattr(e, "closed", False) or getattr(e, "is_closed", False))
+        confidence, score_evidence = _score_entity(spec, k, closed, from_bbox)
+        if k == "LINE" and spec["parsed_role"] in {"column", "beam"}:
+            line_fragments += 1
         es.append(
             {
                 "entity_id": f"E{i:05d}",
@@ -161,13 +240,14 @@ def analyze_dxf_structure(data: bytes, filename="drawing.dxf"):
                 "geometry_raw": {
                     "points": pts,
                     "bbox": box,
-                    "closed": bool(getattr(e, "closed", False) or getattr(e, "is_closed", False)),
+                    "closed": closed,
+                    "source": "entity_bbox" if from_bbox else "vertices",
                 },
                 "layer_spec": spec,
                 "suggested_role": role,
                 "included": role not in {"unknown", "annotation"},
-                "confidence": 0.95 if spec["parsed_role"] != "unknown" else 0.15,
-                "evidence": [f"layer:{ln}", f"entity:{k}"],
+                "confidence": confidence,
+                "evidence": [f"layer:{ln}", f"entity:{k}", *score_evidence],
             }
         )
         types[k] += 1
@@ -217,6 +297,14 @@ def analyze_dxf_structure(data: bytes, filename="drawing.dxf"):
             "طبقات الرسم مؤشرات وليست إثباتًا للوظيفة الإنشائية.",
             "يجب تأكيد الوحدة والبعد والمحاور يدويًا.",
             "عدم وجود كمرة مرسومة لا يثبت صلاحية البلاطة المسطحة.",
+            *(
+                [
+                    f"{line_fragments} خط LINE منفصل على طبقات أعمدة/كمرات؛ لا يتم تجميع الخطوط "
+                    "في عنصر واحد، فاستخدم Polyline مغلقًا أو Block لكل عمود."
+                ]
+                if line_fragments
+                else []
+            ),
         ],
     }
 

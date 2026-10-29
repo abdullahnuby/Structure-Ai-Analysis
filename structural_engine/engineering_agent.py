@@ -3,7 +3,37 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
-import json, time
+import json, os, time
+
+# Ollama drops the OLDEST messages when the prompt exceeds num_ctx, and the workspace
+# snapshot is the first message, so the context window and the size of each tool result
+# are kept explicit and configurable instead of silently overflowing.
+DEFAULT_NUM_CTX = 6144
+TOOL_RESULT_CHAR_LIMIT = 2500
+DEFAULT_MAX_SECONDS = 240.0
+
+
+def _num_ctx():
+    try:
+        return max(
+            2048, min(int(os.environ.get("STRUCTURAL_STUDIO_NUM_CTX", DEFAULT_NUM_CTX)), 32768)
+        )
+    except ValueError:
+        return DEFAULT_NUM_CTX
+
+
+def _model_options():
+    return {"temperature": 0.1, "num_ctx": _num_ctx(), "num_predict": 700}
+
+
+def _tool_content(res):
+    """JSON for the model, cut at a size that keeps the snapshot inside the context window."""
+    text = json.dumps(_safe(res), ensure_ascii=False, default=str)
+    if len(text) <= TOOL_RESULT_CHAR_LIMIT:
+        return text
+    return json.dumps(
+        {"truncated": True, "head": text[: TOOL_RESULT_CHAR_LIMIT - 80]}, ensure_ascii=False
+    )
 
 
 @dataclass
@@ -47,6 +77,75 @@ def _safe(x):
     if isinstance(x, (str, int, float, bool)) or x is None:
         return x
     return str(x)
+
+
+def _drawing_evidence(analysis, building_model=None):
+    """Counts and facts actually observed in the drawing, for the recommendation tool.
+
+    Nothing here decides a structural system: it only reports what the drawing contains so
+    the engineer (or a later design stage) can see which options the evidence does not rule out.
+    """
+    entities = (analysis or {}).get("entities", []) if isinstance(analysis, dict) else []
+    roles, layers_by_role, closed_cols, line_cols = {}, {}, 0, 0
+    for e in entities:
+        if not e.get("included"):
+            continue
+        role = e.get("suggested_role", "unknown")
+        roles[role] = roles.get(role, 0) + 1
+        layers_by_role.setdefault(role, set()).add(e.get("layer"))
+        if role == "column":
+            if (e.get("geometry_raw") or {}).get("closed"):
+                closed_cols += 1
+            if e.get("entity_type") == "LINE":
+                line_cols += 1
+    checks = (building_model or {}).get("vertical_continuity_checks", []) if building_model else []
+    return {
+        "included_entities_by_role": roles,
+        "layers_by_role": {k: sorted(map(str, v))[:6] for k, v in layers_by_role.items()},
+        "column_entities_with_closed_outline": closed_cols,
+        "column_entities_as_loose_lines": line_cols,
+        "vertical_continuity": [
+            {
+                "from": c.get("lower_floor_id"),
+                "to": c.get("upper_floor_id"),
+                "matched": c.get("matched_column_count"),
+                "lower": c.get("lower_column_count"),
+                "upper": c.get("upper_column_count"),
+            }
+            for c in checks[:8]
+        ],
+    }
+
+
+def _system_indicators(roles):
+    beams, walls = roles.get("beam", 0), roles.get("wall", 0)
+    slabs = roles.get("slab_outline", 0)
+    return [
+        {
+            "system_id": "rc_beam_slab",
+            "observed": f"beam entities: {beams}; slab outlines: {slabs}",
+            "must_confirm": ["اتصال الكمرات بالأعمدة", "نوع البلاطة وبحورها"],
+        },
+        {
+            "system_id": "rc_flat_plate",
+            "observed": f"beam entities: {beams} (غياب الكمرات لا يثبت صلاحية البلاطة المسطحة)",
+            "must_confirm": ["القص الثاقب عند الأعمدة", "البحور والسهم", "الفتحات"],
+        },
+        {
+            "system_id": "rc_shear_wall",
+            "observed": f"wall entities: {walls} (وظيفتها الإنشائية غير مؤكدة)",
+            "must_confirm": [
+                "أي حوائط إنشائية فعلًا",
+                "استمرارها رأسيًا",
+                "نظام المقاومة الجانبية",
+            ],
+        },
+        {
+            "system_id": "load_bearing_walls",
+            "observed": f"wall entities: {walls}; column entities: {roles.get('column', 0)}",
+            "must_confirm": ["وظيفة كل حائط", "سمكه ومادته", "الاستمرار الرأسي"],
+        },
+    ]
 
 
 def build_engineering_tools(state, runtime=None):
@@ -208,16 +307,17 @@ def build_engineering_tools(state, runtime=None):
     def recommend(_):
         c = runtime.get("dxf_candidate_model") or {}
         p = c.setdefault("structural_proposal", {})
+        evidence = _drawing_evidence(
+            state.get("dxf_structural_analysis"), state.get("building_stack_model")
+        )
         rec = {
             "system_id": "insufficient_data",
             "name_ar": "البيانات غير كافية لاختيار نظام",
             "status": "NEEDS_ENGINEER_INPUT",
             "rationale": "أسماء الطبقات لا تثبت البحور أو نظام البلاطات أو الاتصال أو المقاومة الجانبية.",
             "alternatives": p.get("system_candidates", []),
-            "based_on_observations": [
-                {"layer": x.get("layer"), "role_candidate": x.get("suggested_role")}
-                for x in (state.get("dxf_structural_analysis") or {}).get("entities", [])[:20]
-            ],
+            "evidence": evidence,
+            "system_indicators": _system_indicators(evidence["included_entities_by_role"]),
             "missing_inputs": [
                 "البحور والقيود المعمارية",
                 "نوع البلاطات والفتحات",
@@ -283,7 +383,9 @@ def build_engineering_tools(state, runtime=None):
 
 
 class EngineeringAgent:
-    def __init__(self, client=None, max_tool_calls=6, max_model_rounds=7):
+    def __init__(
+        self, client=None, max_tool_calls=6, max_model_rounds=7, max_seconds=DEFAULT_MAX_SECONDS
+    ):
         if client is None:
             from .ai_copilot import OllamaClient
 
@@ -291,6 +393,7 @@ class EngineeringAgent:
         self.client = client
         self.max_tool_calls = max(1, min(int(max_tool_calls), 10))
         self.max_model_rounds = max(1, min(int(max_model_rounds), 10))
+        self.max_seconds = max(5.0, float(max_seconds))
 
     def run(self, model, messages, tools, *, image_bytes=None):
         definitions = [x.schema() for x in tools]
@@ -301,13 +404,18 @@ class EngineeringAgent:
         seen = set()
         count = 0
         reason = "MAX_ROUNDS"
+        deadline = time.monotonic() + self.max_seconds
+        timed_out = False
         for rnd in range(1, self.max_model_rounds + 1):
+            if time.monotonic() >= deadline:
+                timed_out = True
+                break
             data = self.client.chat_response(
                 model,
                 chat,
                 image_bytes=image_bytes if rnd == 1 else None,
                 tools=definitions,
-                options={"temperature": 0.1, "num_ctx": 4096, "num_predict": 700},
+                options=_model_options(),
             )
             msg = data.get("message", {})
             calls = msg.get("tool_calls") or []
@@ -359,15 +467,17 @@ class EngineeringAgent:
                     {
                         "role": "tool",
                         "tool_name": name or "unknown",
-                        "content": json.dumps(_safe(res), ensure_ascii=False, default=str)[:9000],
+                        "content": _tool_content(res),
                     }
                 )
             image_bytes = None
-        reason = "MAX_TOOL_CALLS" if count >= self.max_tool_calls else "MAX_ROUNDS"
+        reason = (
+            "TIME_BUDGET"
+            if timed_out
+            else "MAX_TOOL_CALLS" if count >= self.max_tool_calls else "MAX_ROUNDS"
+        )
         try:
-            data = self.client.chat_response(
-                model, chat, options={"temperature": 0.1, "num_ctx": 4096, "num_predict": 700}
-            )
+            data = self.client.chat_response(model, chat, options=_model_options())
             final = str((data.get("message") or {}).get("content") or "").strip()
         except Exception as e:
             final = f"انتهت خطوات الوكيل؛ راجع سجل الأدوات. {e}"

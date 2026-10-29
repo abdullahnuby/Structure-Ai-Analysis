@@ -67,18 +67,21 @@ def validate_building_stack_config(
 ):
     errors = []
     warnings = []
+    # Explicit checks (not `assert`): asserts are stripped under `python -O`.
     try:
         n = int(config.get("above_ground_story_count", 0))
-        assert 1 <= n <= 100
-    except Exception:
+    except (TypeError, ValueError):
+        n = 0
+    if not 1 <= n <= 100:
         n = 0
         errors.append("عدد الأدوار يجب أن يكون 1 إلى 100 ويشمل الأرضي.")
     if not has_ground_plan:
         errors.append("مسقط الدور الأرضي مطلوب.")
     try:
         gh = float(config["ground_story_height_m"])
-        assert math.isfinite(gh) and gh > 0
-    except Exception:
+    except (KeyError, TypeError, ValueError):
+        gh = float("nan")
+    if not (math.isfinite(gh) and gh > 0):
         gh = 0
         errors.append("ارتفاع الدور الأرضي مطلوب.")
     mode = config.get("upper_story_height_mode", "uniform")
@@ -101,18 +104,28 @@ def validate_building_stack_config(
     try:
         street = float(config.get("street_datum_elevation_m", 0))
         off = float(config["ground_finished_floor_offset_from_street_m"])
-        assert math.isfinite(street + off)
-    except Exception:
+    except (KeyError, TypeError, ValueError):
+        street = off = float("nan")
+    if not math.isfinite(street + off):
         street = off = 0
         errors.append("منسوب الشارع وفرق تشطيب الأرضي مطلوبان.")
     basement = bool(config.get("basement_enabled", False))
-    bc = int(config.get("basement_count", 1)) if basement else 0
+    try:
+        bc = int(config.get("basement_count", 1)) if basement else 0
+    except (TypeError, ValueError):
+        bc = 0
+        errors.append("عدد البدرومات غير صالح.")
+    if basement and not 1 <= bc <= 10:
+        bc = 0
+        errors.append("عدد البدرومات يجب أن يكون من 1 إلى 10.")
     try:
         bh = float(config.get("basement_story_height_m", 3.2))
-        assert not basement or (math.isfinite(bh) and bh > 0)
-    except Exception:
-        bh = 3.2
+    except (TypeError, ValueError):
+        bh = float("nan")
+    if basement and not (math.isfinite(bh) and bh > 0):
         errors.append("ارتفاع البدروم غير صالح.")
+    if not math.isfinite(bh) or bh <= 0:
+        bh = 3.2
     if (
         basement
         and not has_basement_plan
@@ -162,8 +175,12 @@ def _center(c):
 
 
 def _offset(g, p):
-    def bounds(plan):
-        b = [_box(c) for c in plan.get("components", []) if _box(c)]
+    def bounds(plan, roles=None):
+        b = [
+            _box(c)
+            for c in plan.get("components", [])
+            if _box(c) and (roles is None or c.get("role") in roles)
+        ]
         return (
             (
                 min(x["min_x"] for x in b),
@@ -175,16 +192,52 @@ def _offset(g, p):
             else None
         )
 
-    a, b = bounds(g), bounds(p)
+    # Align on the column footprint when both plans have columns: a stair core, annotation or
+    # one extra wall must not shift the whole floor away from the columns below it.
+    a, b = bounds(g, {"column"}), bounds(p, {"column"})
+    basis_columns = bool(a and b)
+    if not basis_columns:
+        a, b = bounds(g), bounds(p)
     if not a or not b:
         return 0.0, 0.0, ["تعذر مطابقة أصول المساقط."]
     dx, dy = a[0] - b[0], a[1] - b[1]
     w = []
+    if not basis_columns:
+        w.append("المحاذاة تمت على كل العناصر لعدم وجود أعمدة في أحد المسقطين.")
     if abs((a[2] - a[0]) - (b[2] - b[0])) > 0.15 or abs((a[3] - a[1]) - (b[3] - b[1])) > 0.15:
         w.append("امتداد المسقط مختلف؛ لم يتم تحجيم الرسم.")
     if abs(dx) + abs(dy) > 0.002:
         w.append(f"تمت ترجمة المسقط فقط dx={dx:.3f}m, dy={dy:.3f}m.")
     return dx, dy, w
+
+
+def _max_column_matching(adjacency, n_right):
+    """Maximum bipartite matching (Kuhn). adjacency[i] = candidate right indices, nearest first.
+
+    Returns {left_index: right_index}. Deterministic for a given input order.
+    """
+    import sys
+
+    owner = [-1] * n_right
+    old_limit = sys.getrecursionlimit()
+    sys.setrecursionlimit(max(old_limit, 4 * len(adjacency) + 200))
+
+    def try_left(i, seen):
+        for j in adjacency[i]:
+            if j in seen:
+                continue
+            seen.add(j)
+            if owner[j] == -1 or try_left(owner[j], seen):
+                owner[j] = i
+                return True
+        return False
+
+    try:
+        for i in range(len(adjacency)):
+            try_left(i, set())
+    finally:
+        sys.setrecursionlimit(old_limit)
+    return {owner[j]: j for j in range(n_right) if owner[j] != -1}
 
 
 def build_multistorey_building_candidate(
@@ -325,47 +378,49 @@ def build_multistorey_building_candidate(
             highs = [c for c in comps if c["role"] == "column" and c.get("center_3d_m")]
             used = set()
             matches = []
+            # One-to-one assignment that maximises the number of matched columns inside the
+            # tolerance (augmenting paths), preferring the nearest partner first. Per-column
+            # greedy choices leave columns unmatched when two lower columns compete for the
+            # same upper one even though a full matching exists.
+            adjacency = []
             for lo in lows:
-                can = sorted(
-                    [
-                        (
-                            math.hypot(
-                                lo["center_3d_m"][0] - hi["center_3d_m"][0],
-                                lo["center_3d_m"][1] - hi["center_3d_m"][1],
-                            ),
-                            hi,
-                        )
-                        for hi in highs
-                    ],
-                    key=lambda x: x[0],
+                near = sorted(
+                    (
+                        math.hypot(
+                            lo["center_3d_m"][0] - hi["center_3d_m"][0],
+                            lo["center_3d_m"][1] - hi["center_3d_m"][1],
+                        ),
+                        hi_i,
+                    )
+                    for hi_i, hi in enumerate(highs)
                 )
-                if can and can[0][0] <= column_alignment_tolerance_m:
-                    dist, hi = can[0]
-                    if hi["component_3d_id"] not in used:
-                        used.add(hi["component_3d_id"])
-                        matches.append((lo, hi))
-                        segments.append(
-                            {
-                                "segment_id": f"COLSEG-{len(segments)+1:04d}",
-                                "lower_floor_id": previous["floor_id"],
-                                "upper_floor_id": floor,
-                                "lower_component_id": lo["component_3d_id"],
-                                "upper_component_id": hi["component_3d_id"],
-                                "mark": f"V-C{len(segments)+1:03d}",
-                                "start_xyz_m": lo["center_3d_m"],
-                                "end_xyz_m": hi["center_3d_m"],
-                                "height_m": elev - previous["elevation_m"],
-                                "lower_section_cm": lo.get("section_cm_as_drawn"),
-                                "upper_section_cm": hi.get("section_cm_as_drawn"),
-                                "section_consistency": (
-                                    "MATCH"
-                                    if lo.get("section_cm_as_drawn")
-                                    == hi.get("section_cm_as_drawn")
-                                    else "SECTION_CHANGES_REQUIRES_DESIGN_REVIEW"
-                                ),
-                                "analysis_status": "GEOMETRIC_ONLY_NOT_DESIGNED",
-                            }
-                        )
+                adjacency.append([hi_i for d, hi_i in near if d <= column_alignment_tolerance_m])
+            assigned = _max_column_matching(adjacency, len(highs))
+            for li in sorted(assigned):
+                lo, hi = lows[li], highs[assigned[li]]
+                used.add(hi["component_3d_id"])
+                matches.append((lo, hi))
+                segments.append(
+                    {
+                        "segment_id": f"COLSEG-{len(segments)+1:04d}",
+                        "lower_floor_id": previous["floor_id"],
+                        "upper_floor_id": floor,
+                        "lower_component_id": lo["component_3d_id"],
+                        "upper_component_id": hi["component_3d_id"],
+                        "mark": f"V-C{len(segments)+1:03d}",
+                        "start_xyz_m": lo["center_3d_m"],
+                        "end_xyz_m": hi["center_3d_m"],
+                        "height_m": elev - previous["elevation_m"],
+                        "lower_section_cm": lo.get("section_cm_as_drawn"),
+                        "upper_section_cm": hi.get("section_cm_as_drawn"),
+                        "section_consistency": (
+                            "MATCH"
+                            if lo.get("section_cm_as_drawn") == hi.get("section_cm_as_drawn")
+                            else "SECTION_CHANGES_REQUIRES_DESIGN_REVIEW"
+                        ),
+                        "analysis_status": "GEOMETRIC_ONLY_NOT_DESIGNED",
+                    }
+                )
             checks.append(
                 {
                     "lower_floor_id": previous["floor_id"],

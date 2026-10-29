@@ -7,3 +7,8 @@ __pycache__/
 output/
 test_run/
 .streamlit/
+
+# local workspace: uploaded drawings, project data and chat history must never be committed
+.structural_studio_local/
+*.tmp
+.venv*/
