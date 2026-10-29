@@ -1,0 +1,7 @@
+{
+  "schema_version": "0.7.0",
+  "system_id": "rc_oneway_ribbed",
+  "source_note": "SYNTHETIC TEST FIXTURE; supports are assumed simply supported for reaction bookkeeping only.",
+  "coverage_tolerance_ratio": 0.02,
+  "panels": [{"id":"RIB-PANEL-1","span_m":4.0,"width_m":5.0,"overall_depth_m":0.25,"topping_thickness_m":0.05,"rib_width_m":0.12,"concrete_unit_weight_kN_m3":25.0,"superimposed_dead_kN_m2":1.5,"live_load_kN_m2":2.0,"ribs":[{"rib_id":"R1","tributary_width_m":0.5,"support_start":"B1","support_end":"B2"},{"rib_id":"R2","tributary_width_m":0.5,"support_start":"B1","support_end":"B2"},{"rib_id":"R3","tributary_width_m":0.5,"support_start":"B1","support_end":"B2"},{"rib_id":"R4","tributary_width_m":0.5,"support_start":"B1","support_end":"B2"},{"rib_id":"R5","tributary_width_m":0.5,"support_start":"B1","support_end":"B2"},{"rib_id":"R6","tributary_width_m":0.5,"support_start":"B1","support_end":"B2"},{"rib_id":"R7","tributary_width_m":0.5,"support_start":"B1","support_end":"B2"},{"rib_id":"R8","tributary_width_m":0.5,"support_start":"B1","support_end":"B2"},{"rib_id":"R9","tributary_width_m":0.5,"support_start":"B1","support_end":"B2"},{"rib_id":"R10","tributary_width_m":0.5,"support_start":"B1","support_end":"B2"}]}]
+}

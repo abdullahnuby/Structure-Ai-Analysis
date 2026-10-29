@@ -1,0 +1,4 @@
+{
+  "schema_version":"0.7.0","system_id":"rc_flat_slab","source_note":"SYNTHETIC TEST FIXTURE; not project data and not an Egyptian-code design.","coverage_tolerance_ratio":0.02,
+  "panels":[{"id":"P1","area_m2":20.0,"dead_area_load_kN_m2":5.25,"live_area_load_kN_m2":2.0,"column_tributary_areas":[{"column_id":"C1","area_m2":5.0},{"column_id":"C2","area_m2":5.0},{"column_id":"C3","area_m2":5.0},{"column_id":"C4","area_m2":5.0}],"drop_panel_geometry_confirmed":true}]
+}

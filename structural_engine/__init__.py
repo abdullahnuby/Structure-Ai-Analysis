@@ -1,0 +1,1 @@
+"""Core utilities for the local structural-design prototype."""

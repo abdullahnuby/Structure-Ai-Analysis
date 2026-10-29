@@ -1,0 +1,63 @@
+{
+  "schema_version": "0.2.0",
+  "project": {
+    "project_name": "DEMO — Rectangular RC Building",
+    "project_number": "SS-DEMO-001",
+    "location": "Egypt — demo only",
+    "building_use": "Residential (demo input)",
+    "stories": 2,
+    "story_height_m": 3.0,
+    "concrete_strength_mpa": 25.0,
+    "steel_yield_strength_mpa": 400.0,
+    "code_reference": "Egyptian code edition NOT CONFIRMED — demo only",
+    "soil_report_status": "not provided",
+    "soil_notes": "Demonstration fixture only; no geotechnical report attached.",
+    "source_dxf": null
+  },
+  "units": "m",
+  "grid": {
+    "x": [
+      {"label": "A", "position_m": 0.0},
+      {"label": "B", "position_m": 4.0},
+      {"label": "C", "position_m": 8.0}
+    ],
+    "y": [
+      {"label": "1", "position_m": 0.0},
+      {"label": "2", "position_m": 5.0},
+      {"label": "3", "position_m": 10.0}
+    ]
+  },
+  "columns": [
+    {"mark": "C-A1", "grid_x": "A", "grid_y": "1", "size_x_m": 0.3, "size_y_m": 0.3, "geometry_source": "demo placeholder", "design_status": "NOT_DESIGNED"},
+    {"mark": "C-B1", "grid_x": "B", "grid_y": "1", "size_x_m": 0.3, "size_y_m": 0.3, "geometry_source": "demo placeholder", "design_status": "NOT_DESIGNED"},
+    {"mark": "C-C1", "grid_x": "C", "grid_y": "1", "size_x_m": 0.3, "size_y_m": 0.3, "geometry_source": "demo placeholder", "design_status": "NOT_DESIGNED"},
+    {"mark": "C-A2", "grid_x": "A", "grid_y": "2", "size_x_m": 0.3, "size_y_m": 0.3, "geometry_source": "demo placeholder", "design_status": "NOT_DESIGNED"},
+    {"mark": "C-B2", "grid_x": "B", "grid_y": "2", "size_x_m": 0.3, "size_y_m": 0.3, "geometry_source": "demo placeholder", "design_status": "NOT_DESIGNED"},
+    {"mark": "C-C2", "grid_x": "C", "grid_y": "2", "size_x_m": 0.3, "size_y_m": 0.3, "geometry_source": "demo placeholder", "design_status": "NOT_DESIGNED"},
+    {"mark": "C-A3", "grid_x": "A", "grid_y": "3", "size_x_m": 0.3, "size_y_m": 0.3, "geometry_source": "demo placeholder", "design_status": "NOT_DESIGNED"},
+    {"mark": "C-B3", "grid_x": "B", "grid_y": "3", "size_x_m": 0.3, "size_y_m": 0.3, "geometry_source": "demo placeholder", "design_status": "NOT_DESIGNED"},
+    {"mark": "C-C3", "grid_x": "C", "grid_y": "3", "size_x_m": 0.3, "size_y_m": 0.3, "geometry_source": "demo placeholder", "design_status": "NOT_DESIGNED"}
+  ],
+  "beams": [
+    {"mark": "B-A1-B1", "start_column": "C-A1", "end_column": "C-B1", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-B1-C1", "start_column": "C-B1", "end_column": "C-C1", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-A2-B2", "start_column": "C-A2", "end_column": "C-B2", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-B2-C2", "start_column": "C-B2", "end_column": "C-C2", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-A3-B3", "start_column": "C-A3", "end_column": "C-B3", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-B3-C3", "start_column": "C-B3", "end_column": "C-C3", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-A1-A2", "start_column": "C-A1", "end_column": "C-A2", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-A2-A3", "start_column": "C-A2", "end_column": "C-A3", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-B1-B2", "start_column": "C-B1", "end_column": "C-B2", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-B2-B3", "start_column": "C-B2", "end_column": "C-B3", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-C1-C2", "start_column": "C-C1", "end_column": "C-C2", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"},
+    {"mark": "B-C2-C3", "start_column": "C-C2", "end_column": "C-C3", "width_m": 0.25, "depth_m": 0.5, "design_status": "NOT_DESIGNED"}
+  ],
+  "slabs": [
+    {"mark": "SL-A1-B2", "outline": [[0.0,0.0],[4.0,0.0],[4.0,5.0],[0.0,5.0]], "thickness_m": 0.15, "design_status": "NOT_DESIGNED"},
+    {"mark": "SL-B1-C2", "outline": [[4.0,0.0],[8.0,0.0],[8.0,5.0],[4.0,5.0]], "thickness_m": 0.15, "design_status": "NOT_DESIGNED"},
+    {"mark": "SL-A2-B3", "outline": [[0.0,5.0],[4.0,5.0],[4.0,10.0],[0.0,10.0]], "thickness_m": 0.15, "design_status": "NOT_DESIGNED"},
+    {"mark": "SL-B2-C3", "outline": [[4.0,5.0],[8.0,5.0],[8.0,10.0],[4.0,10.0]], "thickness_m": 0.15, "design_status": "NOT_DESIGNED"}
+  ],
+  "loads": {"live_load_source": null, "lateral_load_basis": null, "notes": "Not populated in demo fixture."},
+  "notes": ["All member dimensions in this fixture are placeholders for pipeline testing only.", "No design or reinforcement calculation is represented by these values."]
+}

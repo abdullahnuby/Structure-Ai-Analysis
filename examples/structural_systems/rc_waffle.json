@@ -1,0 +1,7 @@
+{
+  "schema_version": "0.7.0",
+  "system_id": "rc_waffle",
+  "source_note": "SYNTHETIC FIXTURE; rib area allocation is explicitly provided and must not overlap.",
+  "coverage_tolerance_ratio": 0.02,
+  "panels": [{"id":"W1","area_m2":20.0,"topping_thickness_m":0.06,"concrete_unit_weight_kN_m3":25.0,"superimposed_dead_kN_m2":1.0,"live_load_kN_m2":2.0,"ribs":[{"rib_id":"WX1","span_m":4.0,"tributary_area_m2":5.0,"net_rib_self_weight_kN_m":0.8,"support_start":"B1","support_end":"B2"},{"rib_id":"WX2","span_m":4.0,"tributary_area_m2":5.0,"net_rib_self_weight_kN_m":0.8,"support_start":"B1","support_end":"B2"},{"rib_id":"WY1","span_m":5.0,"tributary_area_m2":5.0,"net_rib_self_weight_kN_m":0.8,"support_start":"C1","support_end":"C2"},{"rib_id":"WY2","span_m":5.0,"tributary_area_m2":5.0,"net_rib_self_weight_kN_m":0.8,"support_start":"C1","support_end":"C2"}]}]
+}

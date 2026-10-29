@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#10283f">
+  <title>Structural Studio | مساحة العمل الهندسية</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 44 44" fill="none"><path d="M7 36V18L22 8L37 18V36H7Z" stroke="currentColor" stroke-width="2.3"/><path d="M14 36V23H30V36M7 18H37M22 8V36M14 27H30" stroke="currentColor" stroke-width="1.7"/><circle cx="22" cy="18" r="2" fill="currentColor"/></svg>
+        </div>
+        <div><div class="brand-name">STRUCTURAL <span>STUDIO</span></div><div class="brand-caption">مساحة العمل الإنشائية</div></div>
+      </div>
+      <div class="workspace-label">مساحة المشروع</div>
+      <div class="project-mini-card">
+        <div class="project-mini-icon">⌂</div>
+        <div class="project-mini-copy"><strong id="sideProjectName">مشروع جديد</strong><span id="sideProjectLocation">لم تحفظ بيانات المشروع</span></div>
+        <span class="online-dot" title="يعمل محليًا"></span>
+      </div>
+      <div class="nav-label">مسار العمل</div>
+      <nav class="main-nav" aria-label="التنقل الرئيسي">
+        <button class="nav-item active" data-view="home"><span class="nav-icon">⌂</span><span>نظرة عامة</span><span class="nav-chevron">‹</span></button>
+        <button class="nav-item" data-view="project"><span class="nav-icon">▤</span><span>بيانات المشروع</span><span class="nav-step" id="navProjectState">١</span></button>
+        <button class="nav-item" data-view="plans"><span class="nav-icon">▧</span><span>المساقط المعمارية</span><span class="nav-step" id="navPlansState">٢</span></button>
+        <button class="nav-item" data-view="building"><span class="nav-icon">▥</span><span>الأدوار والمناسيب</span><span class="nav-step" id="navBuildingState">٣</span></button>
+        <button class="nav-item" data-view="review"><span class="nav-icon">◈</span><span>مراجعة النموذج</span><span class="nav-step" id="navReviewState">٤</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="local-card"><div class="local-icon">⌁</div><div><strong>خصوصية محلية</strong><span>ملفاتك تبقى على جهازك</span></div><span class="status-pill good">LOCAL</span></div>
+        <div class="sidebar-version">Structural Studio <span>v0.18.0</span><br><span class="muted">نسخة تطوير هندسي · غير صالحة للتنفيذ</span></div>
+      </div>
+    </aside>
+
+    <main class="main-area">
+      <header class="topbar">
+        <div class="breadcrumbs"><span>مساحة العمل</span><b>/</b><strong id="crumbTitle">نظرة عامة</strong></div>
+        <div class="topbar-actions">
+          <div class="local-badge"><span class="pulse-dot"></span> تشغيل محلي <span class="vertical-rule"></span> بدون API مدفوع</div>
+          <button class="icon-btn" id="refreshBtn" title="تحديث الحالة" aria-label="تحديث الحالة">↻</button>
+          <div class="avatar">م</div>
+        </div>
+      </header>
+
+      <div class="workspace-body">
+        <div class="content-column">
+          <div id="viewRoot" aria-live="polite"></div>
+          <footer class="main-footer"><span>Structural Studio · مساحة عمل محلية</span><span>كل نموذج ناتج يبقى مسودة حتى استكمال التحقق الهندسي.</span></footer>
+        </div>
+        <aside class="copilot-panel" id="copilotPanel">
+          <div class="copilot-header">
+            <div class="copilot-avatar"><svg viewBox="0 0 34 34" fill="none"><rect x="4" y="4" width="26" height="26" rx="8" stroke="currentColor" stroke-width="1.6"/><path d="M11 13H23M11 17H20M11 21H18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="24" cy="22" r="3" fill="#35B99A" stroke="#F8FFFC" stroke-width="1.5"/></svg></div>
+            <div class="copilot-title"><strong>المهندس المساعد</strong><span>AI Engineering Agent</span></div>
+            <button class="icon-btn small" id="collapseCopilot" title="إخفاء المساعد" aria-label="إخفاء المساعد">↗</button>
+          </div>
+          <div class="ai-connection-box" id="aiConnectionBox">
+            <div class="ai-connection-heading"><span class="connection-indicator" id="aiConnectionDot"></span><strong id="aiConnectionTitle">لم يتم فحص الاتصال</strong></div>
+            <p id="aiConnectionDesc">اختبر النموذج المحلي أولًا حتى نتأكد أن المساعد يرد فعلًا.</p>
+            <button class="btn btn-outline btn-small full-width" id="checkAiBtn">فحص الاتصال بالنموذج</button>
+            <div id="aiModelControls" class="hidden">
+              <label class="field-label" for="aiModelSelect">النموذج المحلي</label>
+              <select id="aiModelSelect" class="control compact"></select>
+              <button class="btn btn-primary btn-small full-width" id="testAiBtn">اختبار رد حقيقي</button>
+              <div id="aiTestResult" class="ai-test-result hidden"></div>
+            </div>
+          </div>
+          <div class="copilot-context" id="copilotContext"><span class="context-icon">✦</span><span>لما ترفع البلان، هراجع المعلومات المتاحة وأوضح لك النواقص قبل أي اقتراح.</span></div>
+          <div class="chat-toolbar"><span>محادثة المشروع</span><button id="clearChatBtn" class="text-button">مسح</button></div>
+          <div class="chat-messages" id="chatMessages">
+            <div class="chat-welcome"><div class="welcome-symbol">✦</div><strong>أهلًا، أنا مساعد المشروع.</strong><p>اسألني عن المسقط أو بيانات المبنى. سأفحص المعلومات المتاحة وأوضح ما أعرفه وما يحتاج تأكيدًا.</p><div class="suggestion-list"><button class="suggestion" data-prompt="راجع حالة المشروع الحالي وحدد أهم البيانات الناقصة قبل تكوين النموذج.">ما البيانات الناقصة؟ <span>↗</span></button><button class="suggestion" data-prompt="راجع طبقات ومسقط الدور الأرضي ووضح ما فهمه البرنامج وما يحتاج تأكيدًا.">راجع المسقط المعماري <span>↗</span></button></div></div>
+          </div>
+          <form id="chatForm" class="chat-composer">
+            <textarea id="chatInput" rows="2" placeholder="اكتب سؤالك هنا..." aria-label="اكتب سؤالك"></textarea>
+            <div class="composer-bottom"><span id="chatState">اختبر اتصال النموذج لبدء المحادثة</span><button class="send-btn" id="sendChatBtn" type="submit" disabled aria-label="إرسال الرسالة">↑</button></div>
+          </form>
+          <div id="agentTrace" class="agent-trace hidden"></div>
+          <div class="copilot-footnote"><span>⌑</span> الوكيل يساعد في المراجعة ولا يعتمد التصميم أو التسليح.</div>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <div class="toast-host" id="toastHost" aria-live="polite"></div>
+  <div class="global-loading hidden" id="globalLoading"><div class="loader"></div><strong id="loadingTitle">جاري التنفيذ...</strong><span id="loadingSubtitle">قد يستغرق الأمر قليلًا</span></div>
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>

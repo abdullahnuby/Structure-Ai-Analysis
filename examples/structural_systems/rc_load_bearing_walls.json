@@ -1,0 +1,4 @@
+{
+  "schema_version":"0.7.0","system_id":"rc_load_bearing_walls","source_note":"SYNTHETIC FIXTURE; floor tributary width and openings reduction are user assumptions.",
+  "walls":[{"wall_id":"W-01","length_m":5.0,"thickness_m":0.25,"clear_height_m":3.0,"material_unit_weight_kN_m3":18.0,"opening_fraction":0.1,"supported_floor_count":2,"floor_tributary_width_m":2.5,"floor_dead_load_kN_m2":4.5,"floor_live_load_kN_m2":2.0}]
+}

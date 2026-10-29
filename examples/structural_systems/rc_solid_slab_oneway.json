@@ -1,0 +1,6 @@
+{
+  "schema_version": "0.7.0",
+  "system_id": "rc_solid_slab_oneway",
+  "source_note": "SYNTHETIC FIXTURE; one-metre simply supported strip under uniform load only.",
+  "panels": [{"id":"S1","span_m":4.0,"strip_width_m":1.0,"thickness_m":0.15,"concrete_unit_weight_kN_m3":25.0,"superimposed_dead_kN_m2":1.5,"live_load_kN_m2":2.0,"support_condition":"simply_supported"}]
+}

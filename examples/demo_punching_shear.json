@@ -1,0 +1,19 @@
+{
+  "title": "Internal flat-slab column — geometry/demand demo only",
+  "slab_length_x_m": 6.0,
+  "slab_length_y_m": 6.0,
+  "column_center_x_m": 3.0,
+  "column_center_y_m": 3.0,
+  "column_width_x_mm": 400.0,
+  "column_width_y_mm": 400.0,
+  "effective_depth_mm": 150.0,
+  "column_reaction_kN": 420.0,
+  "factored_pressure_kN_m2": 12.0,
+  "Mux_kNm": 0.0,
+  "Muy_kNm": 0.0,
+  "free_edges": {"left": false, "right": false, "bottom": false, "top": false},
+  "openings_near_critical_perimeter": false,
+  "drop_panel_or_capital": false,
+  "multiple_support_interaction": false,
+  "reaction_source": "Synthetic test case only; not from structural analysis."
+}

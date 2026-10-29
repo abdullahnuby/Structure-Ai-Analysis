@@ -1,0 +1,13 @@
+{
+  "Lx_m": 4.0,
+  "Ly_m": 4.0,
+  "nx": 8,
+  "ny": 8,
+  "thickness_m": 0.15,
+  "E_MPa": 30000.0,
+  "nu": 0.2,
+  "pressure_kN_m2": 5.0,
+  "density_kN_m3": 25.0,
+  "include_self_weight": false,
+  "support_type": "simply_supported"
+}
