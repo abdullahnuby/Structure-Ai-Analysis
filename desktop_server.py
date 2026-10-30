@@ -36,6 +36,7 @@ from structural_engine.building_stack import (
 from structural_engine.engineering_agent import EngineeringAgent, build_engineering_tools
 from structural_engine.design import run_design
 from structural_engine.design.report import to_markdown
+from structural_engine.design.params import STATUS_BANNER, P
 
 ROOT = Path(__file__).resolve().parent
 WEB_DIR = ROOT / "desktop_web"
@@ -67,6 +68,7 @@ app = FastAPI(
     title="Structural Studio Local Workspace", docs_url=None, redoc_url=None, lifespan=lifespan
 )
 app.mount("/assets", StaticFiles(directory=WEB_DIR / "assets"), name="assets")
+app.mount("/studio", StaticFiles(directory=WEB_DIR / "studio"), name="studio")
 
 # One workspace per process, shared by every request thread: all reads/writes of STATE that
 # must stay consistent (upload -> review -> candidate -> persist) hold this re-entrant lock.
@@ -393,7 +395,13 @@ class ChatPayload(BaseModel):
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
-    return HTMLResponse((WEB_DIR / "index.html").read_text(encoding="utf-8"))
+    return HTMLResponse((WEB_DIR / "studio" / "index.html").read_text(encoding="utf-8"))
+
+
+@app.get("/legacy", response_class=HTMLResponse)
+def legacy_index() -> HTMLResponse:
+    """The previous DXF / building-model workflow, until it is ported to the new interface."""
+    return HTMLResponse((WEB_DIR / "legacy.html").read_text(encoding="utf-8"))
 
 
 @app.get("/api/health")
@@ -1233,6 +1241,12 @@ def ai_chat(payload: ChatPayload) -> dict[str, Any]:
         }
     except Exception as exc:
         raise HTTPException(502, f"تعذر إكمال طلب الوكيل: {exc}") from exc
+
+
+@app.get("/api/design/params")
+def design_params() -> dict[str, Any]:
+    """Every design-code parameter in force, with its verification status."""
+    return {"banner": STATUS_BANNER, "parameters": P.describe(), "unverified": len(P.unverified())}
 
 
 @app.post("/api/design")

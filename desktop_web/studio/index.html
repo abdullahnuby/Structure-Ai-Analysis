@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Structural Studio | التصميم</title>
+  <link rel="stylesheet" href="/studio/studio.css">
+</head>
+<body>
+  <div class="banner" id="banner" role="alert">جاري تحميل حالة معاملات الكود…</div>
+  <div class="shell">
+    <aside class="side" aria-label="العناصر">
+      <div class="brand"><strong>STRUCTURAL STUDIO</strong><span>نواة التصميم · غير صالحة للتنفيذ</span></div>
+      <div class="add-row">
+        <button class="btn" data-add="continuous_beam">+ كمرة</button>
+        <button class="btn" data-add="slab_strip">+ بلاطة</button>
+        <button class="btn" data-add="column">+ عمود</button>
+      </div>
+      <ul class="elements" id="elements"></ul>
+      <div class="side-foot">
+        <button class="btn ghost" id="exportAll">تصدير كل العناصر</button>
+        <label class="btn ghost file">استيراد<input type="file" id="importFile" accept=".json" hidden></label>
+        <a class="btn ghost" href="/legacy">DXF والنموذج (النسخة السابقة)</a>
+        <button class="btn ghost" id="showParams">معاملات الكود</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="empty" id="empty">
+        <h1>ابدأ بعنصر</h1>
+        <p>أضف كمرة مستمرة أو شريحة بلاطة أو عمودًا، أو جرّب مثالًا جاهزًا:</p>
+        <div class="add-row center">
+          <button class="btn primary" data-example="continuous_beam">مثال كمرة ٣ بحور</button>
+          <button class="btn primary" data-example="slab_strip">مثال بلاطة</button>
+          <button class="btn primary" data-example="column">مثال عمود</button>
+        </div>
+      </div>
+
+      <div class="work hidden" id="work">
+        <section class="panel form-panel">
+          <header><h2 id="formTitle">المدخلات</h2><span class="kind" id="kindLabel"></span></header>
+          <form id="form" autocomplete="off"></form>
+          <div class="actions">
+            <button class="btn primary" id="runBtn" type="button">تصميم</button>
+            <label class="check"><input type="checkbox" id="autoRun" checked> تشغيل تلقائي عند التعديل</label>
+            <button class="btn ghost danger" id="deleteBtn" type="button">حذف العنصر</button>
+          </div>
+          <div class="msg" id="formMsg" role="status"></div>
+        </section>
+
+        <section class="panel result-panel" id="resultPanel">
+          <header>
+            <h2>النتائج</h2>
+            <div class="tools">
+              <button class="btn ghost" id="dlReport">تقرير .md</button>
+              <button class="btn ghost" id="dlJson">JSON</button>
+            </div>
+          </header>
+          <div id="result"><p class="muted">اضغط «تصميم» لعرض النتائج.</p></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <dialog id="paramsDialog">
+    <header><h2>معاملات الكود المستخدمة</h2><button class="btn ghost" id="closeParams" type="button">إغلاق</button></header>
+    <p class="muted" id="paramsNote"></p>
+    <div class="table-wrap"><table id="paramsTable"></table></div>
+  </dialog>
+
+  <script src="/studio/studio.js" defer></script>
+</body>
+</html>

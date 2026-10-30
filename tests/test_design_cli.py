@@ -138,3 +138,19 @@ def test_endpoint_rejects_bad_input_and_cross_origin(client):
         ).status_code
         == 403
     )
+
+
+def test_new_interface_is_served_and_legacy_is_kept(client):
+    home = client.get("/")
+    assert home.status_code == 200 and "/studio/studio.js" in home.text
+    assert client.get("/studio/studio.js").status_code == 200
+    assert client.get("/studio/studio.css").status_code == 200
+    legacy = client.get("/legacy")
+    assert legacy.status_code == 200 and "/assets/app.js" in legacy.text
+
+
+def test_params_endpoint_lists_every_parameter_as_unverified(client):
+    data = client.get("/api/design/params").json()
+    assert "UNVERIFIED" in data["banner"]
+    assert data["unverified"] == len(data["parameters"]) > 0
+    assert all(p["verified"] is False for p in data["parameters"])

@@ -81,6 +81,7 @@ _VERIFIED: set[str] = set()
 
 def _load() -> dict[str, Any]:
     values = {k: v for k, (v, _) in _DEFAULTS.items()}
+    _VERIFIED.clear()
     path = os.environ.get("STRUCTURAL_STUDIO_PARAMS")
     if path:
         data = json.loads(open(path, encoding="utf-8").read())
