@@ -1,0 +1,11 @@
+{
+  "type": "slab_strip",
+  "name": "S1 - two-span one-way slab",
+  "spans_m": [4.0, 4.0],
+  "thickness_mm": 140,
+  "fcu_MPa": 30, "fy_MPa": 400,
+  "cover_mm": 20,
+  "dead_kN_m2": 1.5,
+  "live_kN_m2": 2.0,
+  "support_width_mm": 250
+}

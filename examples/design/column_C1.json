@@ -1,0 +1,9 @@
+{
+  "type": "column",
+  "name": "C1 - ground floor",
+  "b_mm": 300, "h_mm": 500,
+  "fcu_MPa": 30, "fy_MPa": 400,
+  "cover_mm": 30, "tie_dia_mm": 8,
+  "Pu_kN": 1500, "Mux_kNm": 120, "Muy_kNm": 30,
+  "unsupported_length_m": 3.0, "k": 1.0, "braced": true
+}

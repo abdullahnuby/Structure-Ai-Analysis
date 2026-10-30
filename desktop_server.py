@@ -19,7 +19,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -34,6 +34,8 @@ from structural_engine.building_stack import (
     create_building_stack_review_package,
 )
 from structural_engine.engineering_agent import EngineeringAgent, build_engineering_tools
+from structural_engine.design import run_design
+from structural_engine.design.report import to_markdown
 
 ROOT = Path(__file__).resolve().parent
 WEB_DIR = ROOT / "desktop_web"
@@ -1231,6 +1233,18 @@ def ai_chat(payload: ChatPayload) -> dict[str, Any]:
         }
     except Exception as exc:
         raise HTTPException(502, f"تعذر إكمال طلب الوكيل: {exc}") from exc
+
+
+@app.post("/api/design")
+def design_endpoint(spec: dict[str, Any] = Body(...), report: bool = False) -> dict[str, Any]:
+    """Run a beam / slab-strip / column design (same JSON as run_design.py). NOT FOR CONSTRUCTION."""
+    try:
+        result = run_design(spec)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(422, f"مدخلات التصميم غير صالحة: {exc!r}") from exc
+    if report:
+        result = {**result, "report_markdown": to_markdown(result)}
+    return result
 
 
 @app.get("/api/ai/history")
