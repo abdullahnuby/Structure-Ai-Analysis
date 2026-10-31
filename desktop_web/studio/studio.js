@@ -1,7 +1,13 @@
 "use strict";
 /* Structural Studio — design workbench. All output is NOT FOR CONSTRUCTION. */
 
-const KIND_LABEL = { continuous_beam: "كمرة مستمرة", slab_strip: "شريحة بلاطة", column: "عمود" };
+const KIND_LABEL = { continuous_beam: "كمرة مستمرة", slab_strip: "شريحة بلاطة", column: "عمود", floor: "دور كامل" };
+const SYSTEMS = {
+  beam_slab: "بلاطات وكمرات (Beam-Slab)",
+  ribbed: "هوردي / Ribbed",
+  flat_plate: "بلاطة مسطحة (Flat Plate)",
+  flat_slab: "بلاطة بدروب (Flat Slab)",
+};
 const STORE_KEY = "structural-studio.elements.v1";
 
 /* ---- field definitions ------------------------------------------------------------------- */
@@ -48,6 +54,21 @@ const FIELDS = {
     F("bars_dia", "Φ", "mm", { optional: true }),
   ],
 };
+FIELDS.floor = [
+  { group: "النظام الإنشائي" },
+  F("system", "System", "", { select: SYSTEMS, full: true }),
+  { group: "الأحمال والارتفاع" },
+  F("finishes_kN_m2", "Finishes", "kN/m²"), F("live_kN_m2", "Live", "kN/m²"),
+  F("storey_height_m", "Storey height", "m"), F("floors", "Floors (identical)", ""),
+  { group: "المواد" },
+  F("fcu_MPa", "fcu", "MPa"), F("fy_MPa", "fy", "MPa"),
+  F("slab_thickness_mm", "Slab thickness", "mm — optional (suggested if empty)", { optional: true }),
+  F("drop_thickness_mm", "Drop thickness", "mm — flat slab only", { optional: true }),
+  { group: "الأعمدة — سطر لكل عمود: id x(m) y(m) b(mm) h(mm)" },
+  F("columns", "Columns", "", { area: "columns", full: true }),
+  { group: "الحوائط (اختياري) — x0 y0 x1 y1 thickness(mm)" },
+  F("walls", "Walls", "", { area: "walls", full: true, optional: true }),
+];
 const DEFAULTS = {
   continuous_beam: {
     type: "continuous_beam", name: "B1", spans_m: [5, 5, 5], b_mm: 250, h_mm: 600, fcu_MPa: 30,
@@ -57,6 +78,12 @@ const DEFAULTS = {
   slab_strip: {
     type: "slab_strip", name: "S1", spans_m: [4, 4], thickness_mm: 140, fcu_MPa: 30, fy_MPa: 400,
     cover_mm: 20, dead_kN_m2: 1.5, live_kN_m2: 2, support_width_mm: 250,
+  },
+  floor: {
+    type: "floor", name: "F1", system: "beam_slab", finishes_kN_m2: 1.5, live_kN_m2: 2, storey_height_m: 3.2,
+    floors: 4, fcu_MPa: 30, fy_MPa: 400, fyst_MPa: 280,
+    columns: [0, 5, 10].flatMap((x, i) => [0, 4.5, 9].map((y, j) => ({ id: `C${i * 3 + j + 1}`, x, y, b_mm: 300, h_mm: 500 }))),
+    walls: [],
   },
   column: {
     type: "column", name: "C1", b_mm: 300, h_mm: 500, fcu_MPa: 30, fy_MPa: 400, cover_mm: 30,
@@ -103,7 +130,7 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 function addElement(type, spec) {
   const base = spec || { ...DEFAULTS[type] };
   const n = elements.filter((e) => e.type === type).length + 1;
-  if (!spec) base.name = `${{ continuous_beam: "B", slab_strip: "S", column: "C" }[type]}${n}`;
+  if (!spec) base.name = `${{ continuous_beam: "B", slab_strip: "S", column: "C", floor: "F" }[type]}${n}`;
   const el = { id: uid(), type, spec: base, status: null };
   elements.push(el);
   save();
@@ -157,6 +184,17 @@ function renderForm(el) {
   for (const f of FIELDS[el.type]) {
     if (f.group) { nodes.push(h("div", { class: "grp" }, f.group)); continue; }
     const val = specToFormValue(el.spec, f.key);
+    if (f.select) {
+      nodes.push(h("label", { class: `f${f.full ? " full" : ""}` }, f.label,
+        h("select", { name: f.key }, Object.entries(f.select).map(([k, v]) => h("option", { value: k, selected: (val || "beam_slab") === k }, v)))));
+      continue;
+    }
+    if (f.area) {
+      const lines = (val || []).map((r) => f.area === "columns" ? `${r.id} ${r.x} ${r.y} ${r.b_mm} ${r.h_mm}` : `${r.x0} ${r.y0} ${r.x1} ${r.y1} ${r.thickness_mm}`).join("\n");
+      nodes.push(h("label", { class: "f full", "data-key": f.key }, f.label,
+        h("textarea", { name: f.key, rows: f.area === "columns" ? 9 : 3, spellcheck: "false" }, lines)));
+      continue;
+    }
     if (f.bool) {
       nodes.push(h("label", { class: "f chk full" },
         h("input", { type: "checkbox", name: f.key, checked: val !== false && val !== undefined ? true : false }), f.label));
@@ -179,11 +217,32 @@ function parseNumber(text) {
 /** Read the form into a spec; returns {spec, errors}. */
 function readForm(el) {
   const spec = { type: el.type, name: $("form").elements.name.value.trim() || "element" };
+  if (el.type === "floor" && el.spec.fyst_MPa !== undefined) spec.fyst_MPa = el.spec.fyst_MPa;
   const errors = [];
   const bars = {};
   for (const f of FIELDS[el.type]) {
     if (f.group) continue;
     const input = $("form").elements[f.key];
+    if (f.select) { spec[f.key] = input.value; continue; }
+    if (f.area) {
+      const rows = input.value.split(/\n/).map((l) => l.trim()).filter(Boolean);
+      const parsed = [];
+      for (const row of rows) {
+        const parts = row.split(/[\s,؛;]+/).filter(Boolean);
+        if (f.area === "columns") {
+          const nums = parts.slice(1).map(parseNumber);
+          if (parts.length !== 5 || nums.some((n) => !Number.isFinite(n))) { errors.push(f.key); break; }
+          parsed.push({ id: parts[0], x: nums[0], y: nums[1], b_mm: nums[2], h_mm: nums[3] });
+        } else {
+          const nums = parts.map(parseNumber);
+          if (parts.length !== 5 || nums.some((n) => !Number.isFinite(n))) { errors.push(f.key); break; }
+          parsed.push({ x0: nums[0], y0: nums[1], x1: nums[2], y1: nums[3], thickness_mm: nums[4] });
+        }
+      }
+      if (f.area === "columns" && parsed.length < 2) errors.push(f.key);
+      spec[f.key] = parsed;
+      continue;
+    }
     if (f.bool) { spec[f.key] = input.checked; continue; }
     const raw = input.value;
     let value;
@@ -278,7 +337,8 @@ const utilCell = (u) => ({ cell: h("td", { class: "num" }, typeof u === "number"
 function renderResult(r, spec) {
   const out = [h("div", {}, statusChip(r.status), " ", h("span", { class: "muted" }, r.name))];
   if (r.failures?.length) out.push(h("div", { class: "box bad" }, "أسباب عدم الاكتمال:", h("ul", {}, r.failures.map((f) => h("li", {}, f)))));
-  if (r.type === "continuous_beam") out.push(...beamView(r));
+  if (r.type === "floor") out.push(...floorView(r, spec));
+  else if (r.type === "continuous_beam") out.push(...beamView(r));
   else if (r.type === "slab_strip") out.push(...slabView(r));
   else out.push(...columnView(r, spec));
   const notes = [...(r.warnings || []), ...(r.assumptions || [])];
@@ -354,6 +414,79 @@ function columnView(r, spec) {
     ["x", "y"].map((a) => [a, num(res.axes[a].M_design_kNm), num(res.axes[a].M_cap_kNm), num(res.axes[a].e_min_mm, 0), res.axes[a].min_ecc_governs ? "نعم" : "لا"])));
   out.push(h("h3", {}, "القطاع"), sectionChart(res, spec));
   return out;
+}
+
+function floorView(r, spec) {
+  const out = [];
+  const eq = r.equilibrium;
+  out.push(h("div", { class: "cards" },
+    h("div", { class: "card" }, h("b", {}, SYSTEMS[r.system] || r.system), h("span", {}, "النظام")),
+    h("div", { class: "card" }, h("b", {}, `${Object.keys(r.columns).length} / ${Object.keys(r.beams).length} / ${Object.keys(r.slabs).length}`), h("span", {}, "Columns / beams / panels")),
+    h("div", { class: "card" }, h("b", {}, `${eq.difference_pct.toFixed(3)}%`), h("span", {}, `اتزان الأحمال الميتة (${fmt(eq.applied_dead_kN, 0)} kN)`))));
+  if (r.warnings?.length) out.push(h("div", { class: "box warn" }, "تنبيهات:", h("ul", {}, r.warnings.map((w) => h("li", {}, w)))));
+  out.push(h("h3", {}, "مسقط النظام المقترح"), planChart(r));
+  out.push(h("h3", {}, "جدول الأعمدة"));
+  out.push(table(["Column", "Pos.", { t: "Section", num: true }, { t: "Pu kN", num: true }, { t: "Mux", num: true }, { t: "Muy", num: true }, "Bars", "Ties", "Ratio"],
+    Object.entries(r.columns).map(([id, c]) => {
+      const d = c.design.result || {};
+      return [id, c.position || "", { cell: h("td", { class: "num" }, `${c.section_mm[0]}×${c.section_mm[1]}`) }, num(c.Pu_kN, 0), num(c.Mux_kNm), num(c.Muy_kNm),
+        barsCell(d.bars || c.design.status), d.tie_dia_mm ? `Φ${d.tie_dia_mm}@${d.tie_spacing_mm}` : "—", utilCell(d.ratio)];
+    })));
+  if (Object.keys(r.beams).length) {
+    out.push(h("h3", {}, "جدول الكمرات"));
+    out.push(table(["Beam", "Dir", { t: "Section", num: true }, "Bottom / span", "Top / support", "Status"],
+      Object.entries(r.beams).map(([id, b]) => [id, `${b.axis} @ ${fmt(b.coord_m, 2)}`, { cell: h("td", { class: "num" }, `${b.section_mm[0]}×${b.section_mm[1]}`) },
+        barsCell(b.design.spans.map((s) => s.sagging.bars || "—").join(" / ")), barsCell(b.design.supports.map((s) => s.hogging.bars || "—").join(" / ")), b.design.status])));
+  }
+  out.push(h("h3", {}, "جدول البلاطات"));
+  const rows = [];
+  for (const [id, s] of Object.entries(r.slabs)) {
+    const size = `${fmt(s.x1 - s.x0, 2)}×${fmt(s.y1 - s.y0, 2)}`;
+    if (s.kind === "flat_strips") {
+      for (const dr of ["x", "y"]) {
+        const e = s.design[dr];
+        rows.push([`${id} (${dr})`, size, `${s.thickness_mm}`, barsCell(`CS ${e.bottom_cs.bars || "—"} · MS ${e.bottom_ms.bars || "—"}`),
+          barsCell(`CS ${e.top_start_cs.bars || "—"}, ${e.top_end_cs.bars || "—"} · MS ${e.top_start_ms.bars || "—"}, ${e.top_end_ms.bars || "—"}`)]);
+      }
+    } else if (s.kind === "rib") {
+      rows.push([id, size, `rib ${s.thickness_mm}`, barsCell(`${s.design.spans[0].sagging.bars || "—"} / rib`), barsCell(s.design.supports.map((x) => x.hogging.bars || "—").join(" / "))]);
+    } else {
+      rows.push([id, size, `${s.thickness_mm}`, barsCell(s.design.spans[0].sagging.bars || "—"), barsCell(s.design.supports.map((x) => x.hogging.bars || "—").join(" / "))]);
+    }
+  }
+  out.push(table(["Panel", "Size m", "Thickness", "Bottom", "Top at supports"], rows));
+  if (r.system === "flat_plate" || r.system === "flat_slab") {
+    out.push(h("h3", {}, "Punching shear"));
+    const prow = [];
+    for (const [id, c] of Object.entries(r.columns)) for (const [where, k] of Object.entries(c.punching))
+      prow.push([id, where.replace("_", " "), num(k.Vu_kN, 0), num(k.qu_MPa, 2), num(k.qcup_MPa, 2), utilCell(k.ratio), k.status]);
+    out.push(table(["Column", "Check", { t: "Vu kN", num: true }, { t: "qu MPa", num: true }, { t: "qcup MPa", num: true }, "Ratio", "Status"], prow));
+  }
+  return out;
+}
+
+function planChart(r) {
+  const gx = r.layout.grid_x_m, gy = r.layout.grid_y_m;
+  const W = 640, pad = 40;
+  const spanX = Math.max(gx.at(-1) - gx[0], 1), spanY = Math.max(gy.at(-1) - gy[0], 1);
+  const sc = (W - 2 * pad) / spanX, Hh = spanY * sc + 2 * pad;
+  const X = (x) => pad + (x - gx[0]) * sc, Y = (y) => Hh - pad - (y - gy[0]) * sc;
+  const kids = [];
+  for (const p of r.layout.panels)
+    kids.push(h("svg:rect", { x: X(p.x0), y: Y(p.y1), width: (p.x1 - p.x0) * sc, height: (p.y1 - p.y0) * sc, fill: "var(--fill)", stroke: "var(--line)" }),
+      h("svg:text", { x: X((p.x0 + p.x1) / 2), y: Y((p.y0 + p.y1) / 2), "text-anchor": "middle" }, p.id));
+  for (const b of r.layout.beams) {
+    const a = b.positions_m[0], z = b.positions_m.at(-1);
+    kids.push(b.axis === "x"
+      ? h("svg:line", { x1: X(a), x2: X(z), y1: Y(b.coord), y2: Y(b.coord), stroke: "var(--c2)", "stroke-width": 3 })
+      : h("svg:line", { x1: X(b.coord), x2: X(b.coord), y1: Y(a), y2: Y(z), stroke: "var(--c2)", "stroke-width": 3 }));
+  }
+  for (const c of r.layout.columns) {
+    const w = Math.max(8, (c.b_mm / 1000) * sc), hh = Math.max(8, (c.h_mm / 1000) * sc);
+    kids.push(h("svg:rect", { x: X(c.x) - w / 2, y: Y(c.y) - hh / 2, width: w, height: hh, fill: "var(--ink)" }),
+      h("svg:text", { x: X(c.x) + w / 2 + 3, y: Y(c.y) - hh / 2 - 2 }, c.id));
+  }
+  return h("svg:svg", { class: "chart", viewBox: `0 0 ${W} ${Hh}`, role: "img", "aria-label": "Structural plan" }, ...kids);
 }
 
 /* ---- charts ------------------------------------------------------------------------------- */

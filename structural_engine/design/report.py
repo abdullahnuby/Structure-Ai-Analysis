@@ -187,22 +187,61 @@ def _floor(r: dict[str, Any]) -> list[str]:
         )
     out += [
         "",
-        "## Slab schedule (one-way strip in the short direction)",
-        "| Panel | Size (m) | Thickness | Short dir | Bottom | Top at supports | Distribution | Status |",
+        "## Slab schedule"
+        + (
+            " (strips by direction; CS = column strip, MS = middle strip, top steel at the two supports)"
+            if r.get("system") in ("flat_plate", "flat_slab")
+            else " (one-way strip in the short direction)"
+        ),
+        "| Panel | Size (m) | Thickness | Short dir / span case | Bottom | Top at supports | Distribution / M0 | Status |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for pid, s in r["slabs"].items():
         d = s["design"]
+        if s.get("kind") == "flat_strips":
+            for dr in ("x", "y"):
+                e = d[dr]
+                out.append(
+                    f"| {pid} | {s['x1'] - s['x0']:.2f} x {s['y1'] - s['y0']:.2f} | {s['thickness_mm']:.0f} | {dr}: {e['case']} span | "
+                    f"CS {e['bottom_cs'].get('bars') or '-'} / MS {e['bottom_ms'].get('bars') or '-'} | "
+                    f"CS {e['top_start_cs'].get('bars') or '-'} , {e['top_end_cs'].get('bars') or '-'} / MS {e['top_start_ms'].get('bars') or '-'} , {e['top_end_ms'].get('bars') or '-'} | "
+                    f"M0 {_f(e['M0'])} kN.m | {'OK' if all(e[k]['status'] == 'OK' for k in ('bottom_cs', 'bottom_ms', 'top_start_cs', 'top_end_cs', 'top_start_ms', 'top_end_ms')) else 'FAIL'} |"
+                )
+            continue
+        if s.get("kind") == "rib":
+            out.append(
+                f"| {pid} | {s['x1'] - s['x0']:.2f} x {s['y1'] - s['y0']:.2f} | rib {s['thickness_mm']:.0f} | {s['direction']} | "
+                f"{d['spans'][0]['sagging'].get('bars') or '-'} per rib | {' / '.join(str(x['hogging'].get('bars') or '-') for x in d['supports'])} | "
+                f"{_stirrups(d)} | {d['status']} |"
+            )
+            continue
         out.append(
             f"| {pid} | {s['x1'] - s['x0']:.2f} x {s['y1'] - s['y0']:.2f} | {s['thickness_mm']:.0f} | {s['direction']} | "
             f"{d['spans'][0]['sagging'].get('bars') or '-'} | {' / '.join(str(x['hogging'].get('bars') or '-') for x in d['supports'])} | "
             f"{d['distribution_steel']['bars']} | {d['status']} |"
         )
+    if r.get("system") in ("flat_plate", "flat_slab"):
+        out += [
+            "",
+            "## Punching shear",
+            "| Column | Position | Check | Vu (kN) | bo (mm) | d (mm) | beta | qu (MPa) | qcup (MPa) | Ratio | Status |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
+        ]
+        for cid, c in r["columns"].items():
+            for where, k in c["punching"].items():
+                out.append(
+                    f"| {cid} | {k['position']} | {where} | {_f(k['Vu_kN'], 0)} | {_f(k['bo_mm'], 0)} | {_f(k['d_mm'], 0)} | {k['beta']} | "
+                    f"{_f(k['qu_MPa'], 2)} | {_f(k['qcup_MPa'], 2)} | {_f(k['ratio'], 2)} | {k['status']} |"
+                )
     out += ["", "# Calculation notes"]
     for bid, b in r["beams"].items():
         out += ["", f"## Beam {bid}", ""] + _beam(b["design"])
     for pid, s in r["slabs"].items():
-        out += ["", f"## Slab panel {pid}", ""] + _slab(s["design"])
+        if s.get("kind") == "flat_strips":
+            continue
+        out += ["", f"## Slab panel {pid}", ""] + (
+            _beam(s["design"]) if s.get("kind") == "rib" else _slab(s["design"])
+        )
     for cid, c in r["columns"].items():
         out += ["", f"## Column {cid}", ""] + _column(c["design"])
     return out

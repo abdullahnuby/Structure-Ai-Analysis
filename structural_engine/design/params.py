@@ -87,6 +87,48 @@ _DEFAULTS: dict[str, tuple[Any, str]] = {
     "beam_min_depth_mm": (500.0, "minimum suggested beam depth"),
     "beam_default_width_mm": (250.0, "suggested beam width"),
     "masonry_unit_weight_kN_m3": (18.0, "wall masonry unit weight (plastered)"),
+    # ---- ribbed (hollow-block) slabs: proposals, not code values ----
+    "rib_width_mm": (150.0, "suggested rib web width"),
+    "rib_spacing_mm": (500.0, "suggested rib centre-to-centre spacing"),
+    "rib_topping_mm": (70.0, "suggested topping (flange) thickness"),
+    "rib_depth_span_ratio": (
+        20.0,
+        "suggested total rib depth = short span / ratio (rule of thumb)",
+    ),
+    "rib_min_depth_mm": (200.0, "minimum suggested total rib depth"),
+    "rib_block_dead_kN_m2": (
+        1.0,
+        "hollow-block fill weight per m2 of slab (verify with the block used)",
+    ),
+    "rib_bar_diameters_mm": ([10, 12, 14, 16, 18], "bar diameters used in ribs"),
+    "rib_stirrup_dia_mm": (6.0, "rib stirrup diameter"),
+    # ---- flat plate / flat slab (direct design method coefficients, recalled, UNVERIFIED) ----
+    "flat_plate_thickness_ratio": (
+        30.0,
+        "min flat-plate thickness = clear span / ratio (deflection proxy, no calculation)",
+    ),
+    "flat_slab_thickness_ratio": (
+        33.0,
+        "min flat-slab (with drops) thickness = clear span / ratio",
+    ),
+    "flat_plate_min_thickness_mm": (180.0, "minimum suggested flat-plate thickness"),
+    "ddm_ext_neg": (0.26, "end span: exterior negative moment / M0 (no edge beam)"),
+    "ddm_ext_pos": (0.52, "end span: positive moment / M0"),
+    "ddm_ext_int_neg": (0.70, "end span: first interior negative moment / M0"),
+    "ddm_int_neg": (0.65, "interior span: negative moment / M0"),
+    "ddm_int_pos": (0.35, "interior span: positive moment / M0"),
+    "ddm_cs_ext_neg": (1.0, "column-strip share of exterior negative moment"),
+    "ddm_cs_int_neg": (0.75, "column-strip share of interior negative moment"),
+    "ddm_cs_pos": (0.60, "column-strip share of positive moment"),
+    "ddm_unbalanced_coeff": (0.07, "interior-column unbalanced moment = coeff * (...)"),
+    "punching_qcup_factor": (
+        0.316,
+        "punching qcup = factor * sqrt(fcu/gamma_c) * min(1, 0.5 + short/long column side)",
+    ),
+    "punching_beta_interior": (1.15, "shear-stress increase for moment transfer, interior column"),
+    "punching_beta_edge": (1.30, "shear-stress increase for moment transfer, edge column"),
+    "punching_beta_corner": (1.50, "shear-stress increase for moment transfer, corner column"),
+    "drop_panel_span_ratio": (3.0, "drop panel side = span / ratio"),
 }
 
 _VERIFIED: set[str] = set()

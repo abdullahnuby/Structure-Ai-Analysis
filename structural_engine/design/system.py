@@ -195,7 +195,9 @@ def propose_layout(
 # ------------------------------------------------------------------------------------------------
 # slab -> beam load distribution
 # ------------------------------------------------------------------------------------------------
-def panel_side_loads(Lx: float, Ly: float, w: float) -> dict[str, dict[str, float]]:
+def panel_side_loads(
+    Lx: float, Ly: float, w: float, *, force_one_way: bool = False
+) -> dict[str, dict[str, float]]:
     """Load delivered by a slab panel (area load w, kN/m2) to each of its four sides.
 
     Returns for every side: eq (kN/m, equivalent uniform load over the whole side for mid-span
@@ -206,7 +208,7 @@ def panel_side_loads(Lx: float, Ly: float, w: float) -> dict[str, dict[str, floa
         raise ValueError("panel dimensions must be positive and the load non-negative")
     Ls, Ll = min(Lx, Ly), max(Lx, Ly)
     m = Ls / Ll
-    one_way = Ll / Ls > P.slab_one_way_ratio
+    one_way = force_one_way or Ll / Ls > P.slab_one_way_ratio
 
     def long_side() -> dict[str, float]:
         if one_way:
@@ -244,6 +246,8 @@ def floor_loads(
     storey_height_m: float,
     slab_thickness_mm: float | dict[str, float] | None = None,
     walls: list[dict[str, Any]] | None = None,
+    slab_self_weight_kN_m2: float | None = None,
+    force_one_way: bool = False,
 ) -> dict[str, Any]:
     """Per beam span: equivalent and true uniform loads (kN/m) from slabs and walls.
 
@@ -266,13 +270,14 @@ def floor_loads(
             t = float(slab_thickness_mm)
         else:
             t = suggested_slab_thickness_mm(Lx, Ly)
-        wd = gamma * t / 1000.0 + finishes_kN_m2
-        d = panel_side_loads(Lx, Ly, wd)
-        l = panel_side_loads(Lx, Ly, live_kN_m2)
+        own = gamma * t / 1000.0 if slab_self_weight_kN_m2 is None else slab_self_weight_kN_m2
+        wd = own + finishes_kN_m2
+        d = panel_side_loads(Lx, Ly, wd, force_one_way=force_one_way)
+        l = panel_side_loads(Lx, Ly, live_kN_m2, force_one_way=force_one_way)
         p["thickness_mm"] = t
         p["dead_kN_m2"] = wd
         p["live_kN_m2"] = live_kN_m2
-        p["one_way"] = max(Lx, Ly) / min(Lx, Ly) > P.slab_one_way_ratio
+        p["one_way"] = force_one_way or max(Lx, Ly) / min(Lx, Ly) > P.slab_one_way_ratio
         panel_report.append(p["id"])
         for side, bid in p["sides"].items():
             a0, a1 = (p["x0"], p["x1"]) if side in ("bottom", "top") else (p["y0"], p["y1"])

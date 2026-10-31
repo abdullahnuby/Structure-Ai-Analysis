@@ -13,8 +13,11 @@ from typing import Any
 from .beam_design import BeamInput, analyze_continuous_beam, design_continuous_beam
 from .column_design import design_column
 from .params import P, STATUS_BANNER
+from .ribbed_design import design_rib, rib_geometry, self_weight_kN_m2
 from .slab_design import design_slab_strip
 from .system import floor_loads, propose_layout
+
+BEAM_SYSTEMS = ("beam_slab", "ribbed")
 
 ASSUMPTIONS = [
     "Grid, beams and slab panels are PROPOSED from the column positions; the engineer must accept or change them.",
@@ -28,6 +31,16 @@ ASSUMPTIONS = [
 ]
 
 
+def _assumptions(system: str) -> list[str]:
+    out = list(ASSUMPTIONS)
+    if system == "ribbed":
+        out[4] = (
+            "Ribs span the short direction of each panel as single-span T-section beams (end fixity assumed); "
+            "solid zones next to beams, cross ribs and two-way action are ignored; web weight is counted over the full depth."
+        )
+    return out
+
+
 def _need(spec: dict[str, Any], key: str) -> float:
     if key not in spec:
         raise ValueError(f"missing input: {key}")
@@ -39,6 +52,10 @@ def _need(spec: dict[str, Any], key: str) -> float:
 
 def design_floor(spec: dict[str, Any]) -> dict[str, Any]:
     columns = spec.get("columns")
+    if spec.get("system") in ("flat_plate", "flat_slab"):
+        from .flat_floor import design_flat_floor
+
+        return design_flat_floor(spec)
     if not isinstance(columns, list) or len(columns) < 2:
         raise ValueError("columns must be a list of at least two columns")
     finishes, live = _need(spec, "finishes_kN_m2"), _need(spec, "live_kN_m2")
@@ -52,17 +69,34 @@ def design_floor(spec: dict[str, Any]) -> dict[str, Any]:
     fyst = float(spec.get("fyst_MPa", 280.0))
     cover = float(spec.get("cover_mm", 25.0))
     name = str(spec.get("name", "floor"))
+    system = str(spec.get("system", "beam_slab"))
+    if system in ("flat_plate", "flat_slab"):
+        from .flat_floor import design_flat_floor
+
+        return design_flat_floor(spec)
+    if system not in BEAM_SYSTEMS:
+        raise ValueError(f"unknown system {system!r}; expected one of {BEAM_SYSTEMS}")
 
     layout = propose_layout(
         columns, beam_b_mm=spec.get("beam_b_mm"), beam_h_mm=spec.get("beam_h_mm")
     )
+    rib_g = None
+    own_weight = None
+    if system == "ribbed":
+        if not layout["panels"]:
+            raise ValueError("ribbed system needs at least one slab panel enclosed by beams")
+        longest_short = max(min(p["x1"] - p["x0"], p["y1"] - p["y0"]) for p in layout["panels"])
+        rib_g = rib_geometry(spec, longest_short)
+        own_weight = self_weight_kN_m2(rib_g)
     loads = floor_loads(
         layout,
         finishes_kN_m2=finishes,
         live_kN_m2=live,
         storey_height_m=H,
-        slab_thickness_mm=spec.get("slab_thickness_mm"),
+        slab_thickness_mm=rib_g["depth_mm"] if rib_g else spec.get("slab_thickness_mm"),
         walls=spec.get("walls"),
+        slab_self_weight_kN_m2=own_weight,
+        force_one_way=system == "ribbed",
     )
     warnings = (
         list(spec.get("plan_notes") or []) + list(layout["warnings"]) + list(loads["warnings"])
@@ -147,20 +181,33 @@ def design_floor(spec: dict[str, Any]) -> dict[str, Any]:
         applied_slab_dead += p["dead_kN_m2"] * Lx * Ly
         applied_slab_live += p["live_kN_m2"] * Lx * Ly
         bw = min(beam_results[bid]["section_mm"][0] for bid in p["sides"].values())
-        r = design_slab_strip(
-            {
-                "type": "slab_strip",
-                "name": p["id"],
-                "spans_m": [Ls],
-                "thickness_mm": p["thickness_mm"],
-                "fcu_MPa": fcu,
-                "fy_MPa": fy,
-                "cover_mm": float(spec.get("slab_cover_mm", 20.0)),
-                "dead_kN_m2": finishes,
-                "live_kN_m2": live,
-                "support_width_mm": bw,
-            }
-        )
+        if rib_g:
+            r = design_rib(
+                p["id"],
+                Ls,
+                rib_g,
+                finishes_kN_m2=finishes,
+                live_kN_m2=live,
+                fcu=fcu,
+                fy=fy,
+                fyst=fyst,
+                support_width_mm=bw,
+            )
+        else:
+            r = design_slab_strip(
+                {
+                    "type": "slab_strip",
+                    "name": p["id"],
+                    "spans_m": [Ls],
+                    "thickness_mm": p["thickness_mm"],
+                    "fcu_MPa": fcu,
+                    "fy_MPa": fy,
+                    "cover_mm": float(spec.get("slab_cover_mm", 20.0)),
+                    "dead_kN_m2": finishes,
+                    "live_kN_m2": live,
+                    "support_width_mm": bw,
+                }
+            )
         if r["status"] != "OK":
             failures += [f"{p['id']}: {f}" for f in r["failures"]]
         slab_results[p["id"]] = {
@@ -172,6 +219,7 @@ def design_floor(spec: dict[str, Any]) -> dict[str, Any]:
             "direction": "x" if Lx < Ly else "y",
             "one_way": p["one_way"],
             "thickness_mm": p["thickness_mm"],
+            "kind": "rib" if rib_g else "solid_strip",
             "design": r,
         }
 
@@ -246,12 +294,14 @@ def design_floor(spec: dict[str, Any]) -> dict[str, Any]:
     return {
         "type": "floor",
         "name": name,
+        "system": system,
+        "rib": rib_g,
         "banner": STATUS_BANNER,
         "unverified_parameters": len(P.unverified()),
         "status": status,
         "failures": failures,
         "warnings": warnings,
-        "assumptions": ASSUMPTIONS,
+        "assumptions": _assumptions(system),
         "input": {
             "finishes_kN_m2": finishes,
             "live_kN_m2": live,
