@@ -36,6 +36,7 @@ from structural_engine.building_stack import (
 from structural_engine.engineering_agent import EngineeringAgent, build_engineering_tools
 from structural_engine.design import run_design
 from structural_engine.design.report import to_markdown
+from structural_engine.design.from_plan import floor_spec_from_candidate
 from structural_engine.design.params import STATUS_BANNER, P
 
 ROOT = Path(__file__).resolve().parent
@@ -1258,6 +1259,36 @@ def design_endpoint(spec: dict[str, Any] = Body(...), report: bool = False) -> d
         raise HTTPException(422, f"مدخلات التصميم غير صالحة: {exc!r}") from exc
     if report:
         result = {**result, "report_markdown": to_markdown(result)}
+    return result
+
+
+class FloorFromPlanPayload(BaseModel):
+    floor: str = "ground"
+    finishes_kN_m2: float = Field(ge=0, le=20)
+    live_kN_m2: float = Field(ge=0, le=20)
+    storey_height_m: float = Field(gt=1.5, le=8)
+    floors: int = Field(default=1, ge=1, le=60)
+    fcu_MPa: float = Field(default=30.0, gt=0, le=120)
+    fy_MPa: float = Field(default=400.0, gt=0, le=800)
+    report: bool = False
+
+
+@app.post("/api/design/floor-from-plan")
+def design_floor_from_plan(payload: FloorFromPlanPayload) -> dict[str, Any]:
+    """Design the uploaded plan's columns/beams/slabs as a floor (layout proposed from the columns)."""
+    with STATE_LOCK:
+        candidate = STATE["plan_candidates"].get(payload.floor)
+    if not candidate:
+        raise HTTPException(400, "ارفع المسقط أولًا.")
+    data = payload.model_dump(exclude={"floor", "report"})
+    try:
+        spec = floor_spec_from_candidate(candidate, name=FLOORS.get(payload.floor), **data)
+        result = run_design(spec)
+    except (ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(422, f"تعذّر تصميم الدور: {exc!r}") from exc
+    result = {**result, "spec": {k: v for k, v in spec.items() if k != "plan_notes"}}
+    if payload.report:
+        result["report_markdown"] = to_markdown(result)
     return result
 
 

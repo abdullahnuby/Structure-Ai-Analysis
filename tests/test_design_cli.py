@@ -37,7 +37,7 @@ def test_every_example_runs_and_writes_json_and_markdown(path, tmp_path, capsys)
 
 
 def test_cli_exit_codes(tmp_path):
-    assert len(EXAMPLES) == 3
+    assert len(EXAMPLES) == 4
     bad = tmp_path / "bad.json"
     bad.write_text("{not json", encoding="utf-8")
     assert run_design.main([str(bad), "--out", str(tmp_path)]) == 2

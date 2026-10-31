@@ -135,6 +135,79 @@ def _column(r: dict[str, Any]) -> list[str]:
     return out
 
 
+def _stirrups(d: dict[str, Any]) -> str:
+    z = [x for sp in d["spans"] for x in sp["shear"]["zones"] if x["status"] == "OK"]
+    if not z:
+        return "-"
+    tight = min(z, key=lambda x: x["spacing_mm"])
+    loose = max(z, key=lambda x: x["spacing_mm"])
+    a, b = (
+        f"Φ{tight['stirrup_dia_mm']:.0f}@{tight['spacing_mm']:.0f}",
+        f"Φ{loose['stirrup_dia_mm']:.0f}@{loose['spacing_mm']:.0f}",
+    )
+    return a if a == b else f"{a} .. {b}"
+
+
+def _floor(r: dict[str, Any]) -> list[str]:
+    inp, eq = r["input"], r["equilibrium"]
+    out = [
+        f"**Loads:** finishes {inp['finishes_kN_m2']} + live {inp['live_kN_m2']} kN/m2 (slab self weight added)  |  "
+        f"storey height {inp['storey_height_m']} m  |  {inp['floors']} identical floors  |  "
+        f"fcu/fy/fyst {inp['fcu_MPa']}/{inp['fy_MPa']}/{inp['fyst_MPa']} MPa",
+        f"**Grid X (m):** {[round(x, 2) for x in r['layout']['grid_x_m']]}  |  **Grid Y (m):** {[round(y, 2) for y in r['layout']['grid_y_m']]}",
+        "",
+        f"**Load take-down check (dead):** applied {_f(eq['applied_dead_kN'])} kN, delivered to columns "
+        f"{_f(eq['delivered_to_columns_dead_kN'])} kN (difference {eq['difference_pct']:.3f} %)",
+        "",
+        "## Column schedule",
+        "| Column | x, y (m) | Section (mm) | Pu/floor (kN) | Pu total (kN) | Mux | Muy | Bars | Ties | Ratio | Status |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
+    ]
+    for cid, c in r["columns"].items():
+        d = c["design"].get("result") or {}
+        out.append(
+            f"| {cid} | {c['x']:.2f}, {c['y']:.2f} | {c['section_mm'][0]:.0f} x {c['section_mm'][1]:.0f} | {_f(c['Pu_per_floor_kN'], 0)} | {_f(c['Pu_kN'], 0)} "
+            f"| {_f(c['Mux_kNm'])} | {_f(c['Muy_kNm'])} | {d.get('bars', '-')} | "
+            + (f"Φ{d['tie_dia_mm']:.0f}@{d['tie_spacing_mm']:.0f}" if d.get("tie_dia_mm") else "-")
+            + f" | {_f(d.get('ratio'), 2)} | {c['design']['status']} |"
+        )
+    out += [
+        "",
+        "## Beam schedule",
+        "| Beam | Dir | Section (mm) | Spans (m) | Bottom bars per span | Top bars per support | Stirrups | Status |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for bid, b in r["beams"].items():
+        d = b["design"]
+        out.append(
+            f"| {bid} | {b['axis']} @ {b['coord_m']:.2f} | {b['section_mm'][0]:.0f} x {b['section_mm'][1]:.0f} | "
+            f"{[round(x, 2) for x in d['input']['spans_m']]} | "
+            f"{' / '.join(str(s['sagging'].get('bars') or '-') for s in d['spans'])} | "
+            f"{' / '.join(str(s['hogging'].get('bars') or '-') for s in d['supports'])} | {_stirrups(d)} | {d['status']} |"
+        )
+    out += [
+        "",
+        "## Slab schedule (one-way strip in the short direction)",
+        "| Panel | Size (m) | Thickness | Short dir | Bottom | Top at supports | Distribution | Status |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for pid, s in r["slabs"].items():
+        d = s["design"]
+        out.append(
+            f"| {pid} | {s['x1'] - s['x0']:.2f} x {s['y1'] - s['y0']:.2f} | {s['thickness_mm']:.0f} | {s['direction']} | "
+            f"{d['spans'][0]['sagging'].get('bars') or '-'} | {' / '.join(str(x['hogging'].get('bars') or '-') for x in d['supports'])} | "
+            f"{d['distribution_steel']['bars']} | {d['status']} |"
+        )
+    out += ["", "# Calculation notes"]
+    for bid, b in r["beams"].items():
+        out += ["", f"## Beam {bid}", ""] + _beam(b["design"])
+    for pid, s in r["slabs"].items():
+        out += ["", f"## Slab panel {pid}", ""] + _slab(s["design"])
+    for cid, c in r["columns"].items():
+        out += ["", f"## Column {cid}", ""] + _column(c["design"])
+    return out
+
+
 def to_markdown(result: dict[str, Any]) -> str:
     kind = result["type"]
     lines = [f"# Design report - {result['name']} ({kind})", "", f"> **{STATUS_BANNER}**", ""]
@@ -143,7 +216,9 @@ def to_markdown(result: dict[str, Any]) -> str:
         + ("" if result["status"] == "OK" else " - " + "; ".join(result.get("failures") or []))
     )
     lines.append("")
-    lines += {"continuous_beam": _beam, "slab_strip": _slab, "column": _column}[kind](result)
+    lines += {"continuous_beam": _beam, "slab_strip": _slab, "column": _column, "floor": _floor}[
+        kind
+    ](result)
     if result.get("warnings"):
         lines += ["", "### Warnings"] + [f"- {w}" for w in result["warnings"]]
     if result.get("assumptions"):

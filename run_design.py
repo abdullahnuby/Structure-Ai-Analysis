@@ -36,6 +36,18 @@ def _summary(r):
             lines.append(
                 f"  support {s['index']}: top {s['hogging'].get('bars') or s['hogging'].get('reason')}"
             )
+    elif r["type"] == "floor":
+        lines.append(
+            f"  {len(r['columns'])} columns, {len(r['beams'])} beams, {len(r['slabs'])} slab panels; "
+            f"load check {r['equilibrium']['difference_pct']:.3f} %"
+        )
+        for cid, c in r["columns"].items():
+            res = c["design"].get("result") or {}
+            lines.append(
+                f"  {cid}: Pu {c['Pu_kN']:.0f} kN -> {res.get('bars', c['design']['status'])}"
+            )
+        for bid, b in r["beams"].items():
+            lines.append(f"  {bid}: {b['design']['status']}")
     else:
         res = r.get("result") or {}
         lines.append(

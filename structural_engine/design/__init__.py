@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-KINDS = ("continuous_beam", "slab_strip", "column")
+KINDS = ("continuous_beam", "slab_strip", "column", "floor")
 
 
 def run_design(spec: dict[str, Any]) -> dict[str, Any]:
@@ -22,4 +22,8 @@ def run_design(spec: dict[str, Any]) -> dict[str, Any]:
         from .column_design import design_column
 
         return design_column(spec)
+    if kind == "floor":
+        from .floor_design import design_floor
+
+        return design_floor(spec)
     raise ValueError(f"Unknown design type {kind!r}; expected one of {KINDS}")

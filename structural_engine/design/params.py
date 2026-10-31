@@ -74,6 +74,19 @@ _DEFAULTS: dict[str, tuple[Any, str]] = {
         15.0,
         "tie spacing <= multiple * smallest longitudinal bar",
     ),
+    # ---- structural layout (proposal rules; engineer decisions, not code values) ----
+    "grid_snap_tolerance_m": (0.15, "column centres closer than this share one grid line"),
+    "max_beam_span_m": (8.0, "columns further apart than this are not joined by a proposed beam"),
+    "slab_one_way_ratio": (2.0, "panel long/short ratio above which the slab is one-way"),
+    "slab_thickness_span_ratio": (
+        32.0,
+        "suggested slab thickness = short span / ratio (rule of thumb)",
+    ),
+    "slab_min_thickness_mm": (120.0, "minimum suggested slab thickness"),
+    "beam_depth_span_ratio": (12.0, "suggested beam depth = longest span / ratio (rule of thumb)"),
+    "beam_min_depth_mm": (500.0, "minimum suggested beam depth"),
+    "beam_default_width_mm": (250.0, "suggested beam width"),
+    "masonry_unit_weight_kN_m3": (18.0, "wall masonry unit weight (plastered)"),
 }
 
 _VERIFIED: set[str] = set()
